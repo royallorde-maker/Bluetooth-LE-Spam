@@ -67,6 +67,9 @@ abstract class AppDatabase : RoomDatabase() {
     // Written by seeding threads, polled from UI coroutines.
     @Volatile var isSeeding = false
 
+    // Non-null when a seed attempt failed; the next launch's repair pass retries the missing rows.
+    @Volatile var seedError: Throwable? = null
+
     // Set true in the Room onCreate callback when the database is first created, so the upgrade
     // sync (DatabaseHelpers.syncBuiltInSets via BleSpamApplication) can tell a fresh install
     // (seeding handles it) from an update to an existing database (sync handles it).
@@ -112,7 +115,13 @@ abstract class AppDatabase : RoomDatabase() {
             return object : Callback() {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     super.onCreate(db)
-                    getInstance().freshlyCreated = true
+                    val database = getInstance()
+                    database.freshlyCreated = true
+                    database.seedError = null
+                    // Mark seeding synchronously, before the worker starts. Otherwise callers that
+                    // check isSeeding immediately after the first DB access can see false and
+                    // conclude an empty database is ready.
+                    database.isSeeding = true
                     Thread {
                         synchronized(this) {
                             seedingThread.run()
@@ -151,25 +160,33 @@ abstract class AppDatabase : RoomDatabase() {
 
         val seedingThread = Runnable {
             Log.d(_logTag, "Starting Database Seeding")
-            getInstance().isSeeding = true
+            // First launch must stay responsive while thousands of rows are generated and
+            // inserted; running the seed at background priority keeps the UI/render threads
+            // schedulable on slower devices instead of tripping the input-dispatch ANR watchdog.
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            val database = getInstance()
+            database.isSeeding = true
+            database.seedError = null
 
-            // One transaction for the whole seed: each saveAdvertisementSet is ~6 inserts, so
-            // seeding thousands of sets in autocommit means tens of thousands of separate
-            // transactions (fsync per commit) -- far slower. Batching makes first-launch seeding
-            // finish in a fraction of the time.
-            getInstance().runInTransaction {
-                builtInAdvertisementSetGenerators.forEach{ generator ->
-                    val advertisementSets = generator.getAdvertisementSets(null)
-                    advertisementSets.forEach{ advertisementSet ->
-                        DatabaseHelpers.saveAdvertisementSet(advertisementSet)
-                    }
+            try {
+                // Collect all generated sets first, then bulk-insert them. The previous
+                // one-DAO-call-per-row loop ran tens of thousands of statements on the main
+                // SQLite connection and could take minutes on a fresh install.
+                val advertisementSets = builtInAdvertisementSetGenerators.flatMap { generator ->
+                    generator.getAdvertisementSets(null)
                 }
 
-                DatabaseHelpers.seedBuiltInListsAndCollections()
+                database.runInTransaction {
+                    DatabaseHelpers.saveAdvertisementSets(advertisementSets)
+                    DatabaseHelpers.seedBuiltInListsAndCollections()
+                }
+                Log.d(_logTag, "Database Seeding finished")
+            } catch (t: Throwable) {
+                database.seedError = t
+                Log.e(_logTag, "Database Seeding failed", t)
+            } finally {
+                database.isSeeding = false
             }
-
-            getInstance().isSeeding = false
-            Log.d(_logTag, "Database Seeding finished")
         }
     }
 }

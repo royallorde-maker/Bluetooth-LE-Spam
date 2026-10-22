@@ -31,97 +31,88 @@ class BluetoothLeScanService(
     private var _bluetoothLeScanner:BluetoothLeScanner? = null
     private var _scanning = false
     private var _bluetoothLeScanServiceCallbacks:MutableList<IBluetoothLeScanCallback> = mutableListOf()
-    private var _flipperDevicesList = mutableListOf<FlipperDeviceScanResult>()
-    private var _spamPackageScanResultList = mutableListOf<SpamPackageScanResult>()
+    private val _flipperDevicesList = mutableListOf<FlipperDeviceScanResult>()
+    private val _spamPackageScanResultList = mutableListOf<SpamPackageScanResult>()
+    private val _mainHandler = Handler(Looper.getMainLooper())
+    private var _housekeepingRunning = false
 
     private val _millis_housekeeping_flipper_devices:Long = 1000
     private val _millis_housekeeping_spam_packages:Long = 1000
     private val _millis_spam_package_lifetime = 5000
     private val _millis_flipper_device_lifetime = 5000
 
+    private val _flipperHousekeeping = object : Runnable {
+        override fun run() {
+            cleanFlipperDevicesList()
+            if (_housekeepingRunning) {
+                _mainHandler.postDelayed(this, _millis_housekeeping_flipper_devices)
+            }
+        }
+    }
+
+    private val _spamHousekeeping = object : Runnable {
+        override fun run() {
+            cleanSpamPackageList()
+            if (_housekeepingRunning) {
+                _mainHandler.postDelayed(this, _millis_housekeeping_spam_packages)
+            }
+        }
+    }
+
     init {
+        refreshScanner()
+    }
+
+    private fun refreshScanner() {
         _bluetoothAdapter = context.bluetoothAdapter()
-        if(_bluetoothAdapter != null){
-            _bluetoothLeScanner = _bluetoothAdapter!!.bluetoothLeScanner
-        }
-
-        // Start Housekeeping:
-        startFlipperDevicesHouseKeeping()
-        startSpamPackagesHouseKeeping()
-        // Add Test Devices:
-        /*
-        for(i in 1..15){
-            var f0Device = FlipperDeviceScanResult()
-            f0Device.flipperDeviceType = FlipperDeviceType.FLIPPER_ZERO_BLACK
-            f0Device.deviceName = "TestItem: ${i}"
-            f0Device.address = i.toString()
-
-            // Dont let it disappear
-            f0Device.lastSeen = LocalDateTime.now().plusWeeks(1)
-
-            _flipperDevicesList.add(f0Device)
-        }
-        */
+        _bluetoothLeScanner = _bluetoothAdapter?.bluetoothLeScanner
     }
 
-    // Cleanup Flipper Device List
-    fun startFlipperDevicesHouseKeeping(){
-        val mainHandler = Handler(Looper.getMainLooper())
-        mainHandler.post(object : Runnable {
-            override fun run() {
-                cleanFlipperDevicesList()
-                mainHandler.postDelayed(this, _millis_housekeeping_flipper_devices)
-            }
-        })
+    private fun startHousekeeping() {
+        if (_housekeepingRunning) return
+        _housekeepingRunning = true
+        _mainHandler.post(_flipperHousekeeping)
+        _mainHandler.post(_spamHousekeeping)
     }
 
-    // Cleanup Flipper Device List
-    fun startSpamPackagesHouseKeeping(){
-        val mainHandler = Handler(Looper.getMainLooper())
-        mainHandler.post(object : Runnable {
-            override fun run() {
-                cleanSpamPackageList()
-                mainHandler.postDelayed(this, _millis_housekeeping_spam_packages)
-            }
-        })
+    private fun stopHousekeeping() {
+        _housekeepingRunning = false
+        _mainHandler.removeCallbacks(_flipperHousekeeping)
+        _mainHandler.removeCallbacks(_spamHousekeeping)
     }
 
     private fun cleanFlipperDevicesList(){
         val currentTime = LocalDateTime.now()
-        var itemsToRemove = mutableListOf<FlipperDeviceScanResult>()
-        _flipperDevicesList.forEachIndexed{ index, flipperDevice ->
-            val lifetime = Duration.between(flipperDevice.lastSeen, currentTime).toMillis()
-            if(lifetime >= _millis_flipper_device_lifetime){
-                itemsToRemove.add(flipperDevice)
-            }
+        val itemsToRemove = _flipperDevicesList.filter { flipperDevice ->
+            Duration.between(flipperDevice.lastSeen, currentTime).toMillis() >= _millis_flipper_device_lifetime
         }
 
-        if(itemsToRemove.count() > 0){
-            itemsToRemove.forEach{itemToRemove ->
-                _flipperDevicesList.remove(itemToRemove)
-            }
-            _bluetoothLeScanServiceCallbacks.forEach{callback ->
-                callback.onFlipperListUpdated()
+        if(itemsToRemove.isNotEmpty()){
+            _flipperDevicesList.removeAll(itemsToRemove.toSet())
+            _bluetoothLeScanServiceCallbacks.toList().forEach{callback ->
+                try {
+                    callback.onFlipperListUpdated()
+                } catch (t: Throwable) {
+                    Log.e(_logTag, "Flipper list callback failed", t)
+                }
             }
         }
     }
 
     private fun cleanSpamPackageList(){
         val currentTime = LocalDateTime.now()
-        var itemsToRemove = mutableListOf<SpamPackageScanResult>()
-        _spamPackageScanResultList.forEachIndexed{ index, spamPackage ->
-            val lifetime = Duration.between(spamPackage.lastSeen, currentTime).toMillis()
-            if(lifetime >= _millis_spam_package_lifetime){
-                itemsToRemove.add(spamPackage)
-            }
+        val itemsToRemove = _spamPackageScanResultList.filter { spamPackage ->
+            Duration.between(spamPackage.lastSeen, currentTime).toMillis() >= _millis_spam_package_lifetime
         }
 
-        if(itemsToRemove.count() > 0){
-            itemsToRemove.forEach{itemToRemove ->
-                _spamPackageScanResultList.remove(itemToRemove)
-            }
-            _bluetoothLeScanServiceCallbacks.forEach{callback ->
-                callback.onSpamResultPackageListUpdated()
+        if(itemsToRemove.isNotEmpty()){
+            _spamPackageScanResultList.removeAll(itemsToRemove.toSet())
+            _bluetoothLeScanServiceCallbacks.toList().forEach{callback ->
+                try {
+                    callback.onSpamResultPackageListUpdated()
+                } catch (t: Throwable) {
+                    Log.e(_logTag, "Spam list callback failed", t)
+                }
             }
         }
     }
@@ -152,26 +143,46 @@ class BluetoothLeScanService(
     }
 
     override fun startScanning(){
-        if (PermissionCheck.checkPermission(Manifest.permission.BLUETOOTH_SCAN, context)) {
-            if (_bluetoothLeScanner != null) {
-                // SET THE FILTERS AND SETTINGS
-                val filterList:List<ScanFilter> = mutableListOf(ScanFilter.Builder().build())
+        if (_scanning) return
+        refreshScanner()
 
-                val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-                _bluetoothLeScanner!!.startScan(filterList, settings, this)
+        if (!PermissionCheck.checkPermission(Manifest.permission.BLUETOOTH_SCAN, context)) {
+            Log.d(_logTag, "Missing permission to start BLE scan")
+            _scanning = false
+            return
+        }
+        val scanner = _bluetoothLeScanner
+        if (scanner == null) {
+            Log.d(_logTag, "BLE scanner is null (Bluetooth off or unsupported)")
+            _scanning = false
+            return
+        }
 
-                Log.d(_logTag, "Started BLE Scan")
-                _scanning = true
-            }
+        val filterList:List<ScanFilter> = mutableListOf(ScanFilter.Builder().build())
+        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+        try {
+            scanner.startScan(filterList, settings, this)
+            Log.d(_logTag, "Started BLE Scan")
+            _scanning = true
+            startHousekeeping()
+        } catch (t: Throwable) {
+            Log.e(_logTag, "Could not start BLE scan", t)
+            _scanning = false
+            stopHousekeeping()
         }
     }
 
     override fun stopScanning() {
-        if (PermissionCheck.checkPermission(Manifest.permission.BLUETOOTH_SCAN, context)) {
-            if (_bluetoothLeScanner != null) {
-                _bluetoothLeScanner!!.stopScan(this)
+        val wasScanning = _scanning
+        _scanning = false
+        stopHousekeeping()
+
+        if (wasScanning && PermissionCheck.checkPermission(Manifest.permission.BLUETOOTH_SCAN, context)) {
+            try {
+                _bluetoothLeScanner?.stopScan(this)
                 Log.d(_logTag, "Stopped BLE Scan")
-                _scanning = false
+            } catch (t: Throwable) {
+                Log.e(_logTag, "Could not stop BLE scan", t)
             }
         }
     }
@@ -186,77 +197,84 @@ class BluetoothLeScanService(
     override fun onScanResult(callbackType: Int, result: ScanResult?) {
         super.onScanResult(callbackType, result)
         if(result != null){
-            val bluetoothLeScanResult = BluetoothLeScanResult.parseFromScanResult(context, result)
+            try {
+                val bluetoothLeScanResult = BluetoothLeScanResult.parseFromScanResult(context, result)
 
-            // Check if its a Flipper
-            if(BluetoothLeDeviceClassificationHelper.isFlipperDevice(bluetoothLeScanResult)){
-                val flipperDeviceScanResult = FlipperDeviceScanResult.parseFromBluetoothLeScanResult(bluetoothLeScanResult)
-                addFlipperDeviceToList(flipperDeviceScanResult)
+                // Check if its a Flipper
+                if(BluetoothLeDeviceClassificationHelper.isFlipperDevice(bluetoothLeScanResult)){
+                    val flipperDeviceScanResult = FlipperDeviceScanResult.parseFromBluetoothLeScanResult(bluetoothLeScanResult)
+                    addFlipperDeviceToList(flipperDeviceScanResult)
+                }
+
+                //Check if its Spam
+                if(BluetoothLeDeviceClassificationHelper.isSpamPackage(bluetoothLeScanResult)){
+                    val spamPackageScanResult = SpamPackageScanResult.parseFromBluetoothLeScanResult(bluetoothLeScanResult)
+                    addSpamPackageScanResultToList(spamPackageScanResult)
+                }
+            } catch (t: Throwable) {
+                // A malformed / vendor-specific advertisement must never kill the scan pipeline.
+                Log.e(_logTag, "Could not process scan result", t)
             }
 
-            //Check if its Spam
-            if(BluetoothLeDeviceClassificationHelper.isSpamPackage(bluetoothLeScanResult)){
-                val spamPackageScanResult = SpamPackageScanResult.parseFromBluetoothLeScanResult(bluetoothLeScanResult)
-                addSpamPackageScanResultToList(spamPackageScanResult)
-            }
-
-            _bluetoothLeScanServiceCallbacks.forEach { callback ->
-                callback.onScanResult(result)
+            _bluetoothLeScanServiceCallbacks.toList().forEach { callback ->
+                try {
+                    callback.onScanResult(result)
+                } catch (t: Throwable) {
+                    Log.e(_logTag, "Scan result callback failed", t)
+                }
             }
         }
     }
 
     fun addFlipperDeviceToList(flipperDeviceScanResult: FlipperDeviceScanResult){
-        var elementIndex = -1
-        _flipperDevicesList.forEach {flipperDevice ->
-            if(flipperDevice.address == flipperDeviceScanResult.address){
-                elementIndex = _flipperDevicesList.indexOf(flipperDevice)
-            }
+        val elementIndex = _flipperDevicesList.indexOfFirst {
+            it.address == flipperDeviceScanResult.address
         }
-
         val alreadyKnown = elementIndex != -1
 
         if(elementIndex == -1){
-            //  Add
             _flipperDevicesList.add(flipperDeviceScanResult)
         } else {
-            // Update
             _flipperDevicesList[elementIndex] = flipperDeviceScanResult
         }
 
-        _bluetoothLeScanServiceCallbacks.forEach {callback ->
-            callback.onFlipperListUpdated()
-            callback.onFlipperDeviceDetected(flipperDeviceScanResult, alreadyKnown)
+        _bluetoothLeScanServiceCallbacks.toList().forEach {callback ->
+            try {
+                callback.onFlipperListUpdated()
+                callback.onFlipperDeviceDetected(flipperDeviceScanResult, alreadyKnown)
+            } catch (t: Throwable) {
+                Log.e(_logTag, "Flipper callback failed", t)
+            }
         }
     }
 
     fun addSpamPackageScanResultToList(spamPackageScanResult: SpamPackageScanResult){
-        var elementIndex = -1
-        _spamPackageScanResultList.forEachIndexed {index, spamPackage ->
-            if(spamPackage.address == spamPackageScanResult.address){
-                elementIndex = index
-            }
+        val elementIndex = _spamPackageScanResultList.indexOfFirst {
+            it.address == spamPackageScanResult.address
         }
-
         val alreadyKnown = elementIndex != -1
 
         if(elementIndex == -1){
-            //  Add
             _spamPackageScanResultList.add(spamPackageScanResult)
         } else {
-            // Update
             _spamPackageScanResultList[elementIndex] = spamPackageScanResult
         }
 
-        _bluetoothLeScanServiceCallbacks.forEach {callback ->
-            callback.onSpamResultPackageDetected(spamPackageScanResult, alreadyKnown)
-            callback.onSpamResultPackageListUpdated()
+        _bluetoothLeScanServiceCallbacks.toList().forEach {callback ->
+            try {
+                callback.onSpamResultPackageDetected(spamPackageScanResult, alreadyKnown)
+                callback.onSpamResultPackageListUpdated()
+            } catch (t: Throwable) {
+                Log.e(_logTag, "Spam callback failed", t)
+            }
         }
     }
 
     override fun onScanFailed(errorCode: Int) {
         super.onScanFailed(errorCode)
 
+        _scanning = false
+        stopHousekeeping()
         when(errorCode){
             SCAN_FAILED_ALREADY_STARTED -> Log.e(_logTag, "onScanFailed: SCAN_FAILED_ALREADY_STARTED")
             SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> Log.e(_logTag, "onScanFailed: SCAN_FAILED_APPLICATION_REGISTRATION_FAILED")

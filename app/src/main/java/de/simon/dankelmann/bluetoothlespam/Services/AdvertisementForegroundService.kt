@@ -69,7 +69,14 @@ class AdvertisementForegroundService: IAdvertisementServiceCallback, IAdvertisem
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
+        val app = applicationContext as BleSpamApplication
+        if (!app.queueHandler.isActive()) {
+            // A sticky restart (or a stale system start) with no active queue would leave an
+            // empty ongoing notification running forever.
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -92,10 +99,9 @@ class AdvertisementForegroundService: IAdvertisementServiceCallback, IAdvertisem
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            val mChannel = NotificationChannel(_channelId, _channelName, NotificationManager.IMPORTANCE_HIGH)
+            val mChannel = NotificationChannel(_channelId, _channelName, NotificationManager.IMPORTANCE_LOW)
             mChannel.description = _channelDescription
-            mChannel.enableLights(true)
-            mChannel.lightColor = Color.BLUE
+            mChannel.setShowBadge(false)
             notificationManager.createNotificationChannel(mChannel)
         }
     }
@@ -204,7 +210,7 @@ class AdvertisementForegroundService: IAdvertisementServiceCallback, IAdvertisem
             this,
             0,
             toggleIntent,
-            PendingIntent.FLAG_MUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         notificationView.setOnClickPendingIntent(
@@ -215,9 +221,9 @@ class AdvertisementForegroundService: IAdvertisementServiceCallback, IAdvertisem
         val stopIntent = Intent(this, StopButtonListener::class.java)
         val pendingStopSwitchIntent = PendingIntent.getBroadcast(
             this,
-            0,
+            1,
             stopIntent,
-            PendingIntent.FLAG_MUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         notificationView.setOnClickPendingIntent(
@@ -260,7 +266,6 @@ class AdvertisementForegroundService: IAdvertisementServiceCallback, IAdvertisem
         override fun onReceive(context: Context, intent: Intent) {
             (context.applicationContext as BleSpamApplication)
                 .queueHandler.deactivate(context, true)
-            stopService(context)
         }
     }
 

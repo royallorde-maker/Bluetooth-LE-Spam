@@ -34,6 +34,7 @@ import de.simon.dankelmann.bluetoothlespam.ui.theme.SpecterTopAppBarClearance
 import de.simon.dankelmann.bluetoothlespam.ui.theme.ThemeModeOption
 import de.simon.dankelmann.bluetoothlespam.ui.theme.ThemeModePicker
 import de.simon.dankelmann.bluetoothlespam.ui.theme.ThemeSwatchPicker
+import de.simon.dankelmann.bluetoothlespam.ui.update.UpdateSection
 
 /**
  * Hand-rolled replacement for `PreferenceFragmentCompat` (plan §5/§11 — no Compose equivalent
@@ -171,6 +172,9 @@ fun PreferencesScreen(
                 icon = painterResource(R.drawable.ic_location_searching),
             )
         }
+
+        item { SectionHeader("Updates") }
+        item { UpdateSection() }
 
         item { SectionHeader("Debug Settings") }
         item {

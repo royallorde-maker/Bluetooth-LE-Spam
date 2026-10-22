@@ -68,21 +68,44 @@ class BleSpamApplication : Application() {
             try {
                 val database = AppDatabase.getInstance()
                 // Force the database open (cheap -- one small table) so a fresh install runs Room's
-                // onCreate, and thus sets freshlyCreated, before we branch on it.
+                // onCreate and starts its seeding thread before we branch on freshlyCreated.
                 database.advertisementSetListDao().getAll()
+
+                if (database.freshlyCreated) {
+                    // Do not record the seed version while the seed transaction is still running:
+                    // if the process dies in between, the next launch must retry instead of
+                    // assuming the (absent) collections are up to date.
+                    var waitedMs = 0L
+                    while (waitedMs < 120_000L) {
+                        if (database.seedError != null) break
+                        if (!database.isSeeding && waitedMs >= 250L) break
+                        Thread.sleep(50L)
+                        waitedMs += 50L
+                    }
+                }
+
+                // Repairs the built-in list/collection graph for every launch, including installs
+                // that were killed halfway through an older fire-and-forget seed.
+                DatabaseHelpers.ensureBuiltInListsAndCollections()
 
                 val settings = SettingsRepository.getInstance(this)
                 val currentVersion = DatabaseHelpers.BUILT_IN_SEED_VERSION
+                val collectionsMissing =
+                    database.advertisementSetCollectionDao().getBuiltInCollections().isEmpty()
 
-                when {
-                    database.freshlyCreated ->
-                        runBlocking { settings.setBuiltInSeedVersion(currentVersion) }
-
-                    settings.builtInSeedVersion != currentVersion -> {
-                        DatabaseHelpers.syncBuiltInSets()
-                        runBlocking { settings.setBuiltInSeedVersion(currentVersion) }
-                    }
+                if (database.seedError != null ||
+                    (!database.freshlyCreated && settings.builtInSeedVersion != currentVersion) ||
+                    collectionsMissing
+                ) {
+                    DatabaseHelpers.syncBuiltInSets()
                 }
+
+                runBlocking { settings.setBuiltInSeedVersion(currentVersion) }
+                Log.d(
+                    "BleSpamApplication",
+                    "Built-in data ready (fresh=${database.freshlyCreated}, " +
+                        "seedError=${database.seedError?.message})",
+                )
             } catch (e: Exception) {
                 Log.e("BleSpamApplication", "Built-in advertisement set sync failed", e)
             }
@@ -90,7 +113,28 @@ class BleSpamApplication : Application() {
     }
 
     fun setupAdvertisementService() {
+        // Switching between the legacy and modern advertiser must not leave the old queue running
+        // against a service that is no longer referenced. Stop it first (this also tears down the
+        // foreground service/notification), then swap in the new implementation while keeping the
+        // existing queue handler so UI callbacks registered on it stay valid.
+        val hadService = ::advertisementService.isInitialized
+        val hadQueueHandler = ::queueHandler.isInitialized
+        val previousTxPowerLevel = if (hadService) advertisementService.getTxPowerLevel() else null
+
+        if (hadQueueHandler && queueHandler.isActive()) {
+            queueHandler.deactivate(this)
+        }
+
         advertisementService = BluetoothHelpers.getAdvertisementService(this)
-        queueHandler = AdvertisementSetQueueHandler(this, advertisementService)
+        // TX power is a user preference that lives on the service instance; preserve it across
+        // the swap instead of silently resetting to the default while the slider still says
+        // otherwise.
+        previousTxPowerLevel?.let { advertisementService.setTxPowerLevel(it) }
+
+        if (hadQueueHandler) {
+            queueHandler.setAdvertisementService(advertisementService)
+        } else {
+            queueHandler = AdvertisementSetQueueHandler(this, advertisementService)
+        }
     }
 }

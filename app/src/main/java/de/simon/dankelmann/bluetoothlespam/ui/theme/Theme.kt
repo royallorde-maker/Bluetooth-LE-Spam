@@ -34,7 +34,11 @@ fun SpecterTheme(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     val colorScheme = remember(darkTheme, useDynamic, seedColorArgb, amoled) {
-        val base = if (seedColorArgb != ThemeManager.THEME_SEED_COLOR_DEVICE) {
+        val base = if (!dynamicColor) {
+            // Dynamic color is explicitly off: always use the app's own brand palette, even
+            // when the theme picker still has a custom seed color stored from before.
+            if (darkTheme) DarkColors else LightColors
+        } else if (seedColorArgb != ThemeManager.THEME_SEED_COLOR_DEVICE) {
             // User picked a fixed color in the theme picker — same algorithm as the device
             // dynamic-color path (material-kolor mirrors dynamicLightColorScheme's generator),
             // just seeded from their choice instead of the wallpaper.

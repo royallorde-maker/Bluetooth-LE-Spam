@@ -87,6 +87,10 @@
 
     <!-- Toasts -->
     <string name="toast_no_items_selected">No items selected</string>
+    <string name="toast_advertising_start_failed">Could not start advertising. Check Bluetooth and permissions.</string>
+    <string name="toast_missing_advertising_permission">Bluetooth advertising permissions are missing. Grant them on the Info tab.</string>
+    <string name="toast_bluetooth_disabled">Bluetooth is disabled. Enable it and try again.</string>
+    <string name="toast_missing_scan_permission">Bluetooth scan permission is missing. Grant it on the Info tab.</string>
 
     <!-- Permissions -->
     <string name="missing_permissions_title">Missing Permissions</string>

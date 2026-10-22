@@ -1,169 +1,240 @@
-# Bluetooth LE Spam [![Discord](https://img.shields.io/discord/1170266776731406386?label=Discord&link=https://discord.gg/x4e4Gma585)](https://discord.gg/x4e4Gma585)
+# Bluetooth LE Spam — Revamped Fork
 
-[<img src="https://f-droid.org/badge/get-it-on.png"
-alt="Get it on F-Droid"
-height="80">](https://f-droid.org/packages/de.simon.dankelmann.bluetoothlespam/)
+[<img src="https://img.shields.io/badge/GitHub-royallorde--maker%2FBluetooth--LE--Spam-181717?logo=github" alt="GitHub">](https://github.com/royallorde-maker/Bluetooth-LE-Spam)
+[<img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License: GPL-3.0">](LICENSE)
 
-This project uses the built-in Bluetooth Low Energy (BLE) functionality built into Android devices
-to create Phantom Bluetooth Device Advertisements, similar to what is known, for instance, in the case of the Flipper Zero.
-While other apps are available that provide similar functionality, the objective of this app is to enhance convenience and user-friendliness in the process.
+This is an unofficial, community-maintained fork of
+[simondankelmann/Bluetooth-LE-Spam](https://github.com/simondankelmann/Bluetooth-LE-Spam).
+It keeps the original app's purpose and package name, and adds a Material 3 interface, a faster
+and more reliable first launch, lifecycle fixes, and an in-app updater.
 
-#### [For Support, Join the Discord Server](https://discord.gg/x4e4Gma585)
+> [!IMPORTANT]
+> **This fork is signed with its own release key.** It cannot be installed over the official app
+> or the F-Droid build, and the official app cannot be updated with this APK. Uninstall the
+> official app first — **that deletes its saved data** — then install this fork. Once you are on a
+> fork release, later fork releases update normally and keep your data.
 
-> [!NOTE]
-> This project is not actively updated due to no further optimizations to the exploit.
-> Contributions from anyone are appreciated.   
+## What's new in 1.1.0
 
-## Requirements
-
-<details >
-<summary>Details</summary>
-<br>
-- Android 8.0 (API level 26) or later <br>
- <br>
-Tip: If you don't know your API level visit <a href="https://developer.android.com/tools/releases/platforms">SDK Platform release notes</a>. You also can view your Android version in the Info tab in settings.
- <br>
-   <br>
-- You can not run the app on IOS or PC (even with emulators/VM's)
-
-</details>
-
-
-## Functionality
-
-<details >
-<summary>Sending BLE advertisements (Pop-Ups)</summary>
-<br>
-This app can send BLE advertisements that mimic the usage of various services.
-This can cause nearby devices that listen to such advertisements to show unwanted popup dialogs.
-
-Supported services are:
-
-- Apple (new device popups, various action modals)
-- [Microsoft Swift Pair](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/bluetooth-swift-pair) (Windows Devices)
-- Samsung Easy Setup
-
-End of life services are:
-- [Google Fast Pair](https://developers.google.com/nearby/fast-pair/landing-page) (Android devices) -- patched on modern devices
-  
-You can send BLE advertisements for all services or for selected targets only.
-
-</details>
-
-<details >
-<summary>Apple iOS 17 Crash (patched)</summary>
-<br>
-With some modifications to the advertised BLE package, it is possible to trigger a reboot in various iOS 17 devices.
-This causes the targeted iPhone to temporarily freeze for a few minutes before automatically restarting.
-
-This is reported to be partially patched in iOS 17.2, and fully patched in iOS 18.
-
-> Note:
-> To achieve optimal results, it is recommended to set the advertising interval to a value between 20 and 100 milliseconds.
->Additionally, locking and unlocking the targeted iPhone can aid in the process.
-
-</details>
-
-<details >
-<summary>Lovespouse (Adult Toys)</summary>
-<br>
-With these BLE advertisements, it is possible to enable and disable various adult toys that support the Lovespouse app.
-Additionally, the "Denial of Pleasure" can be executed by selecting the Lovespouse Stops List and setting the repeat mode to Repeat List. More information on this topic can be found <a href="https://mandomat.github.io/2023-11-13-denial-of-pleasure/">here</a>.
-</details>
-
-<details >
-<summary>Spam Detector</summary>
-<br>
-The Spam Detector tool allows you to detect nearby spammers, even on the lock screen.
-It can identify spam from Flipper Zeros, our app, and various other software and scripts.
-Once your device has detected spam, it will send you a notification, indicating whether it was sent by a Flipper Zero or another source.
-
-  > NOTE:
-> Location permission and background location access are required for this feature to work.
-> These permissions are necessary because Android mandates them for Bluetooth scanning in the background.
-> It's important to note that the app will NOT collect your location data.
-</details>
-
-## Range
-
-<details >
-<summary>Details</summary>
-<br>
-The range of Bluetooth Low Energy (BLE) can vary between devices.
-Some may have a long range, while others may have a short range.
-
-Android's Bluetooth Low Energy API allows apps to set the TX Power level and include it in the advertiser's payload.
-However, it doesn't permit direct modification of the byte values actually transmitted in the payload.
-This limitation affects the range of the Fast Pair functionality.
-Receiving devices calculate the transmitter's proximity based on the actual received signal strength and the transmitted byte in the payload, which contains the TX Power level the transmitter used.
-
-Devices like the Flipper Zero, however, have the capability to modify this byte, significantly extending their range.
-</details>
-
-
-## Installation
-
-<details >
-<summary>Details</summary>
-<br>
-You can get installable APK files from the <a href="https://github.com/simondankelmann/Bluetooth-LE-Spam/releases">Github Releases</a>
-and from <a href="https://f-droid.org/packages/de.simon.dankelmann.bluetoothlespam/">F-Droid</a>.
-You can clone the git repo and also build the app yourself.
-
-If you are an end-user looking for a fully functional app, download the Release APK for optimal performance (simply go for this one).
-If you are a developer or tester, opt for the Debug APK for testing and debugging purposes.
-</details>
-
-## Credits
-
-<details >
-<summary>Click to open</summary>
-<br>
-- <a href="https://www.mobile-hacker.com/author/boni11/">mh from mobile-hacker.com</a> for the <a href="https://www.mobile-hacker.com/2023/09/07/spoof-ios-devices-with-bluetooth-pairing-messages-using-android/">Article / Guideline</a> about using the nRF Connect App to Spoof iOS Devices  <br> 
-- <a href="https://github.com/Willy-JL">Willy-JL</a>, <a href="https://github.com/ECTO-1A">ECTO-1A</a>, <a href="https://github.com/Spooks4576">Spooks4567</a> and <a href="https://github.com/Mr-Proxy-source">Mrproxy</a> for their contribution in the BLE Spam App on the Flipper Zero <br>  
-- <a href="https://github.com/furiousMAC">FuriousMAC</a> and <a href="https://github.com/hexway">Hexway</a> for their prior researches <br>  
-- <a href="https://mandomat.github.io/aboutme/">mandomat</a> for the research of <a href="https://mandomat.github.io/2023-11-13-denial-of-pleasure/">Denial of Pleasure</a><br>
-- <a href="https://github.com/tutozz">tutozz</a> for the research of Easy Setup Buds in Android<br>
-- <a href="https://github.com/K3YOMI">K3YOMI</a> for the spam detector idea <br>  
-- <a href="https://www.tiktok.com/discover/glorious-gizmos">Glorious Gizmos</a> for making content and tutorials on our app <br>  
-- And special thanks to anyone else who has been involved in prior research and publications related to this topic. <br>  
-</details>
+- **Material 3 "Specter" redesign** — a floating, blur-backed navigation bar, four tabs
+  (Info, Advertise, Detect, Settings), edge-to-edge layouts, and redesigned cards and dialogs.
+- **Theming** — light, dark, OLED black, system dynamic color, or a custom seed color. Blur
+  effects are enabled by default and can be switched off on devices where they render poorly.
+- **Much faster first launch** — built-in advertisement sets are seeded in bulk instead of one
+  database transaction at a time. Subsequent launches repair and synchronize built-in data in the
+  background without blocking the UI.
+- **Advertising and scanning reliability** — fixed service start/stop handling, foreground
+  service notification updates, queue advancing, stale detector results, permission loops,
+  first-advertisement skipping, and TX-power preservation when switching service modes.
+- **Group editor hardening** — validated names, atomic saves, stable ordering, duplicate-tap
+  protection, and clear inline errors.
+- **In-app updates** — Settings → Updates checks the fork's GitHub release feed, downloads the
+  APK, verifies its package and signing certificate, and opens the system installer.
 
 ## Screenshots
 
+| Info | Advertise |
+| --- | --- |
+| <img src="docs/screenshots/info.png" width="320" alt="Info tab with requirements checklist"> | <img src="docs/screenshots/advertise.png" width="320" alt="Advertise tab with built-in collections"> |
+
+| Detect | Settings |
+| --- | --- |
+| <img src="docs/screenshots/detect.png" width="320" alt="Spam detector tab"> | <img src="docs/screenshots/settings.png" width="320" alt="Settings tab with appearance controls"> |
+
+<img src="docs/screenshots/advertising-active.png" width="360" alt="Advertising an advertisement set from the Fast Pair collection">
+
+The screenshots were taken on Android 15 at a 360 dp phone width. Themes, colors, and blur depend
+on the device.
+
+## Install
+
+1. Download `BluetoothLESpam-release.apk` from the
+   [latest release](https://github.com/royallorde-maker/Bluetooth-LE-Spam/releases/latest).
+2. If the official app or an F-Droid build is installed, uninstall it first. The signing keys
+   differ, so Android will refuse the install otherwise. **Uninstalling removes the official
+   app's saved collections.**
+3. Open the APK and allow "Install unknown apps" for your browser or file manager when asked.
+4. Grant the Bluetooth, notification, and (for the Detector tab) location permissions the app
+   requests. Android requires location permission for background BLE scanning; the app does not
+   collect or upload location data.
+
+Debug builds use the package suffix `.debug`, so they can be installed side by side with a release
+build. A debug build cannot update a release build, and vice versa.
+
+## In-app updates
+
+Open **Settings → Updates**. The app fetches
+[`updates/version.json`](updates/version.json), compares its `versionCode` with the installed
+build, and offers the newer APK when one exists.
+
+- Downloads go through Android's `DownloadManager`; progress and cancellation are shown in the
+  card.
+- Before launching the installer, the app checks that the APK is readable, has the expected
+  package name, and is signed with the same certificate as the installed app.
+- Android requires the "Install unknown apps" permission for the first in-app update. The card
+  links directly to the right settings page.
+- The update manifest and APK are served from this repository's GitHub releases over HTTPS. Only
+  `github.com` / `githubusercontent.com` URLs are accepted.
+
+The updater is intentionally not a silent installer — Android always shows the system install
+confirmation.
+
+## Build from source
+
+Requirements:
+
+- JDK 21
+- Android SDK Platform 37 and build tools
+- A device or emulator running Android 8.0 (API 26) or newer with BLE support
+
+Point Gradle at your SDK by creating `local.properties`:
+
+```properties
+sdk.dir=/path/to/Android/Sdk
+```
+
+Build a debug APK (signed with the debug key, package suffix `.debug`):
+
+```bash
+./gradlew :app:assembleDebug
+```
+
+Run unit tests:
+
+```bash
+./gradlew test
+```
+
+Build a release APK (minified and resource-shrunk). Without a signing key the release build falls
+back to the debug key, which is fine for local testing but must not be published:
+
+```bash
+./gradlew :app:assembleRelease
+```
+
+For a properly signed local release, place `app/release.jks` in the project and export:
+
+```bash
+export STORE_PASSWORD='...'
+export KEY_ALIAS='...'
+export KEY_PASSWORD='...'
+./gradlew :app:assembleRelease
+```
+
+`app/release.jks` is git-ignored. Back it up: losing it means future releases cannot update
+installed copies.
+
+## Release process
+
+The GitHub Actions workflow in
+[`.github/workflows/android-release.yml`](.github/workflows/android-release.yml) builds, tests,
+signs, and publishes the APK whenever `main` receives a change under `app/`, and then updates
+`updates/version.json` so the in-app updater advertises the build.
+
+1. Bump `versionCode` and `versionName` in [`app/build.gradle.kts`](app/build.gradle.kts).
+2. Commit and push to `main`.
+3. The workflow creates the `v<versionName>` tag/release, uploads
+   `BluetoothLESpam-release.apk`, and commits the new manifest.
+4. The manifest commit does not retrigger the workflow.
+
+Required repository secrets:
+
+| Secret | Contents |
+| --- | --- |
+| `STORE_FILE` | Base64-encoded `release.jks` (`base64 -w0 app/release.jks`) |
+| `STORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Release key alias |
+| `KEY_PASSWORD` | Key password |
+
+The workflow refuses to publish if `STORE_FILE` is missing, so an unsigned or debug-signed APK
+cannot become the "latest" release by accident.
+
+## Functionality inherited from upstream
+
 <details>
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width=300>
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width=300>
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width=300>
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width=300>
+<summary>Sending BLE advertisements (pop-ups)</summary>
+<br>
+
+The app broadcasts BLE advertisements that mimic pairing and setup services. Nearby devices may
+show pairing pop-ups or react to the advertised device. Supported families include:
+
+- Apple (new-device pop-ups and various action modals)
+- Microsoft Swift Pair (Windows)
+- Samsung Easy Setup
+- Google Fast Pair (patched on modern Android devices)
+- Lovespouse devices
+
+Advertisement sets can be sent as the full built-in collection or as selected targets, groups,
+and custom collections.
 </details>
+
+<details>
+<summary>Apple iOS 17 crash advertisement</summary>
+<br>
+
+A specially crafted BLE payload could temporarily freeze and reboot some iOS 17 devices. This was
+partially patched in iOS 17.2 and fully patched in iOS 18. For best results with older devices,
+use an advertising interval between 20 and 100 ms and lock/unlock the target phone.
+</details>
+
+<details>
+<summary>Spam detector</summary>
+<br>
+
+The Detector tab scans for known spam advertisement patterns in the background and posts a
+notification that identifies Flipper Zero and other common spam sources. Android requires
+location permission (including background location for lock-screen detection) to scan BLE in the
+background. The app does not collect or transmit location data.
+</details>
+
+<details>
+<summary>Range and TX power</summary>
+<br>
+
+BLE range depends on the phone, antenna, and environment. Android's BLE API lets apps advertise a
+declared TX power level, but does not allow arbitrary modification of the transmitted payload
+bytes. Devices such as the Flipper Zero can modify those bytes and therefore achieve a longer
+effective range for some advertisement types.
+</details>
+
+## Project layout
+
+- `app/src/main/java/de/simon/dankelmann/bluetoothlespam/ui/` — Compose screens and navigation
+- `app/src/main/java/de/simon/dankelmann/bluetoothlespam/Services/` — advertising and scanning
+  foreground services
+- `app/src/main/java/de/simon/dankelmann/bluetoothlespam/update/` — in-app update check, download,
+  and install verification
+- `app/src/main/java/de/simon/dankelmann/bluetoothlespam/Helpers/DatabaseHelpers.kt` — built-in
+  data generation, seeding, and synchronization
+- `updates/version.json` — manifest consumed by the updater
+
+## Credits
+
+This fork builds directly on the work of Simon Dankelmann and the upstream contributors. Please
+support the upstream project:
+
+- [simondankelmann/Bluetooth-LE-Spam](https://github.com/simondankelmann/Bluetooth-LE-Spam)
+- [Discord community](https://discord.gg/x4e4Gma585)
+
+Additional research and inspiration:
+
+- [mh from mobile-hacker.com](https://www.mobile-hacker.com/author/boni11/) — BLE device spoofing
+  guidelines
+- [Willy-JL](https://github.com/Willy-JL), [ECTO-1A](https://github.com/ECTO-1A),
+  [Spooks4576](https://github.com/Spooks4576), and
+  [Mr-Proxy-source](https://github.com/Mr-Proxy-source) — BLE Spam on Flipper Zero
+- [FuriousMAC](https://github.com/furiousMAC) and [Hexway](https://github.com/hexway) — prior
+  research
+- [mandomat](https://mandomat.github.io/aboutme/) — Lovespouse / "Denial of Pleasure" research
+- [tutozz](https://github.com/tutozz) — Easy Setup Buds research
+- [K3YOMI](https://github.com/K3YOMI) — spam detector idea
 
 ## Disclaimer
-<details >
-<summary>Disclaimer for Bluetooth Low Energy Protocol Investigation Repository</summary>
-<br>
-This repository contains code for the investigation and experimentation of the Bluetooth Low Energy (BLE) protocol.
-Please be aware of the following disclaimers before using or contributing to this repository:
 
-1. Purpose: The code and information provided in this repository are intended for educational and research purposes and is just a proof of concept.
-   It is not intended for any malicious or harmful activities.
+This project is provided for educational and security research purposes. Use it only on devices
+you own or are authorized to test, and comply with all applicable laws and regulations. BLE
+experimentation can affect nearby devices and may have security and privacy implications. The
+maintainers provide the software "as is", without warranty, and are not responsible for misuse or
+for any damage resulting from its use.
 
-2. Legal Compliance: Users are responsible for ensuring that their use of the code and information in this repository complies with all applicable laws and regulations, including those governing wireless communication and intellectual property rights.
-
-3. No Warranty: The code and information provided in this repository are provided "as is" without any warranties, expressed or implied.
-   The authors and contributors are not responsible for any consequences resulting from the use of this code.
-
-4. Risks: Experimenting with BLE protocols can have potential security and privacy implications.
-   Users should exercise caution and use this code responsibly, respecting the privacy and security of devices and systems.
-
-5. Contribution Guidelines: If you contribute to this repository, ensure that your contributions comply with the project's goals and the repository's license.
-   By contributing, you agree to license your contributions under the same license as this repository.
-
-6. Support: This repository is not maintained for production use.
-   The authors and contributors may not provide support or updates regularly.
-
-By using and contributing to this repository, you agree to these disclaimers and guidelines.
-If you do not agree, please refrain from using or contributing to this repository.
-
-For any questions or concerns, please contact the repository maintainers on Discord or Github.
-</details>
+This repository is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).

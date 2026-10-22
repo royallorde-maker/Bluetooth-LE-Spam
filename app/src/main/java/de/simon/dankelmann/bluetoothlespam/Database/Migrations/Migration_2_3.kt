@@ -81,16 +81,10 @@ val Migration_2_3 = object : Migration(2, 3) {
                 "ON `AssociationListSetEntity` (`advertisementSetId`)",
         )
 
-        // Seed the built-in lists/collections from the AdvertisementSet rows that already exist
-        // (same fire-and-forget-Thread pattern as Migration_1_2 — the rest of the app already
-        // tolerates isSeeding being true for a beat after a migration/create).
-        Thread {
-            synchronized(this) {
-                AppDatabase.getInstance().isSeeding = true
-                DatabaseHelpers.seedBuiltInListsAndCollections()
-                AppDatabase.getInstance().isSeeding = false
-            }
-        }.start()
+        // Built-in lists/collections are repaired by DatabaseHelpers.ensureBuiltInListsAndCollections()
+        // on the next app start (BleSpamApplication). Do not seed from a fire-and-forget Thread
+        // here: if the process dies before it finishes, the database is left half-seeded with no
+        // way to tell, and the UI polls isSeeding forever. The startup repair is idempotent.
 
         Log.d(_logTag, "Finished Executing Migration...")
     }

@@ -4,12 +4,17 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import de.simon.dankelmann.bluetoothlespam.BleSpamApplication
 import de.simon.dankelmann.bluetoothlespam.Database.AppDatabase
 import de.simon.dankelmann.bluetoothlespam.Database.Entities.AdvertisementSetCollectionEntity
@@ -31,12 +36,34 @@ fun AdvertisementCollectionRoute(
     onCreateCustomGroup: () -> Unit,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var customGroups by remember { mutableStateOf<List<AdvertisementSetCollectionEntity>>(emptyList()) }
+    var refreshKey by remember { mutableIntStateOf(0) }
+    var firstResume by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            customGroups = AppDatabase.getInstance().advertisementSetCollectionDao().getCustomCollections()
+    LaunchedEffect(refreshKey) {
+        customGroups = withContext(Dispatchers.IO) {
+            try {
+                AppDatabase.getInstance().advertisementSetCollectionDao().getCustomCollections()
+            } catch (t: Throwable) {
+                emptyList()
+            }
         }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            // New custom groups are created on a separate screen; reload when we come back.
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (firstResume) {
+                    firstResume = false
+                } else {
+                    refreshKey++
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     AdvertisementCollectionScreen(

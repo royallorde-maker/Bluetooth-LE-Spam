@@ -74,7 +74,13 @@ class BluetoothLeScanForegroundService: IBluetoothLeScanCallback, Service() {
         scanService.addBluetoothLeScanServiceCallback(this)
         scanService.startScanning()
 
-        return START_STICKY
+        if (!scanService.isScanning()) {
+            Log.e(_logTag, "Scan did not start; stopping foreground service")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -98,10 +104,9 @@ class BluetoothLeScanForegroundService: IBluetoothLeScanCallback, Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            val mChannel = NotificationChannel(_channelId, _channelName, NotificationManager.IMPORTANCE_HIGH)
+            val mChannel = NotificationChannel(_channelId, _channelName, NotificationManager.IMPORTANCE_LOW)
             mChannel.description = _channelDescription
-            mChannel.enableLights(true)
-            mChannel.lightColor = Color.BLUE
+            mChannel.setShowBadge(false)
             notificationManager.createNotificationChannel(mChannel)
         }
     }

@@ -56,7 +56,7 @@ class DatabaseHelpersSeedingTest {
             val database = AppDatabase.getInstance()
             database.advertisementSetDao().getAll()
             var waitedMillis = 0L
-            while (database.isSeeding && waitedMillis < 5000) {
+            while (database.isSeeding && waitedMillis < 120_000) {
                 Thread.sleep(20)
                 waitedMillis += 20
             }

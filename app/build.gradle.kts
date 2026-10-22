@@ -9,19 +9,28 @@ val app_name = "Bluetooth LE Spam"
 android {
     namespace = "de.simon.dankelmann.bluetoothlespam"
     compileSdk = 37
+    val releaseKeystore = file("release.jks")
 
     defaultConfig {
         applicationId = "de.simon.dankelmann.bluetoothlespam"
         minSdk = 26
         targetSdk = compileSdk
-        versionCode = 3
-        versionName = "1.0.9"
+        versionCode = 4
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Feed read by the in-app updater. The release workflow rewrites this file after each
+        // tagged build, so the app always advertises the newest APK from the fork's releases.
+        buildConfigField(
+            "String",
+            "UPDATE_URL",
+            "\"https://raw.githubusercontent.com/royallorde-maker/Bluetooth-LE-Spam/main/updates/version.json\"",
+        )
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.jks")
+            storeFile = releaseKeystore
             storePassword = System.getenv("STORE_PASSWORD")
             keyAlias = System.getenv("KEY_ALIAS")
             keyPassword = System.getenv("KEY_PASSWORD")
@@ -30,7 +39,7 @@ android {
 
     buildTypes {
         configureEach {
-            val variant = if (File("release.jks").exists()) "release" else "debug"
+            val variant = if (releaseKeystore.exists()) "release" else "debug"
             signingConfig = signingConfigs[variant]
         }
         release {
@@ -56,6 +65,7 @@ android {
     buildFeatures {
         compose = true
         resValues = true
+        buildConfig = true
     }
 
     testOptions {

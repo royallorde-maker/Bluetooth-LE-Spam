@@ -1,6 +1,7 @@
 package de.simon.dankelmann.bluetoothlespam.ui.advertisement
 
 import android.content.Context
+import android.Manifest
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -26,6 +27,9 @@ import de.simon.dankelmann.bluetoothlespam.Enums.AdvertisementQueueMode
 import de.simon.dankelmann.bluetoothlespam.Enums.AdvertisementState
 import de.simon.dankelmann.bluetoothlespam.Handlers.AdvertisementSetQueueHandler
 import de.simon.dankelmann.bluetoothlespam.Helpers.DatabaseHelpers
+import de.simon.dankelmann.bluetoothlespam.Helpers.BluetoothHelpers.Companion.bluetoothAdapter
+import de.simon.dankelmann.bluetoothlespam.PermissionCheck.PermissionCheck
+import de.simon.dankelmann.bluetoothlespam.R
 import de.simon.dankelmann.bluetoothlespam.Interfaces.Callbacks.IAdvertisementServiceCallback
 import de.simon.dankelmann.bluetoothlespam.Interfaces.Callbacks.IAdvertisementSetQueueHandlerCallback
 import de.simon.dankelmann.bluetoothlespam.Models.AdvertisementSet
@@ -121,8 +125,8 @@ fun AdvertisementRoute() {
     }
 
     DisposableEffect(lifecycleOwner) {
+        val queue = (context.applicationContext as BleSpamApplication).queueHandler
         val observer = LifecycleEventObserver { _, event ->
-            val queue = (context.applicationContext as BleSpamApplication).queueHandler
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     queue.addAdvertisementServiceCallback(callback)
@@ -148,7 +152,15 @@ fun AdvertisementRoute() {
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+
+        // Remove callbacks on dispose too: navigating away can destroy the composition without
+        // delivering a subsequent ON_PAUSE, which used to leave this route receiving service
+        // callbacks (and leaking the composable/lambda) for the rest of the process lifetime.
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            queue.removeAdvertisementServiceCallback(callback)
+            queue.removeAdvertisementQueueHandlerCallback(callback)
+        }
     }
 
     val isAdvertising by viewModel.isAdvertising.observeAsState(false)
@@ -199,11 +211,25 @@ fun AdvertisementRoute() {
 
 private fun onPlayButtonClicked(context: Context, viewModel: AdvertisementViewModel) {
     val queue = (context.applicationContext as BleSpamApplication).queueHandler
-    if (viewModel.isAdvertising.value == true) {
+    if (queue.isActive()) {
         queue.deactivate(context)
-    } else {
-        queue.activate(context)
+        viewModel.isAdvertising.value = false
+        return
     }
+
+    if (!PermissionCheck.checkPermission(Manifest.permission.BLUETOOTH_ADVERTISE, context) ||
+        !PermissionCheck.checkPermission(Manifest.permission.BLUETOOTH_CONNECT, context)
+    ) {
+        Toast.makeText(context, R.string.toast_missing_advertising_permission, Toast.LENGTH_LONG).show()
+        return
+    }
+    val adapter = context.bluetoothAdapter()
+    if (adapter == null || !adapter.isEnabled) {
+        Toast.makeText(context, R.string.toast_bluetooth_disabled, Toast.LENGTH_LONG).show()
+        return
+    }
+
+    queue.activate(context)
 }
 
 private fun setAdvertisementQueueMode(context: Context, viewModel: AdvertisementViewModel, mode: AdvertisementQueueMode) {

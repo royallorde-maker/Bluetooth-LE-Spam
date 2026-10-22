@@ -1,8 +1,10 @@
 package de.simon.dankelmann.bluetoothlespam.ui.spamDetector
 
+import android.Manifest
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -17,9 +19,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.simon.dankelmann.bluetoothlespam.BleSpamApplication
+import de.simon.dankelmann.bluetoothlespam.Helpers.BluetoothHelpers.Companion.bluetoothAdapter
 import de.simon.dankelmann.bluetoothlespam.Interfaces.Callbacks.IBluetoothLeScanCallback
 import de.simon.dankelmann.bluetoothlespam.Models.FlipperDeviceScanResult
 import de.simon.dankelmann.bluetoothlespam.Models.SpamPackageScanResult
+import de.simon.dankelmann.bluetoothlespam.PermissionCheck.PermissionCheck
+import de.simon.dankelmann.bluetoothlespam.R
 import de.simon.dankelmann.bluetoothlespam.Services.BluetoothLeScanForegroundService
 
 private const val LOG_TAG = "SpamDetectorRoute"
@@ -58,8 +63,8 @@ fun SpamDetectorRoute() {
     }
 
     DisposableEffect(lifecycleOwner) {
+        val scanService = (context.applicationContext as BleSpamApplication).scanService
         val observer = LifecycleEventObserver { _, event ->
-            val scanService = (context.applicationContext as BleSpamApplication).scanService
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     scanService.addBluetoothLeScanServiceCallback(callback)
@@ -72,7 +77,10 @@ fun SpamDetectorRoute() {
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            scanService.removeBluetoothLeScanServiceCallback(callback)
+        }
     }
 
     val isDetecting by viewModel.isDetecting.observeAsState(false)
@@ -87,7 +95,10 @@ fun SpamDetectorRoute() {
 
 private fun updateFlipperDevicesListView(context: Context, flipperDevices: SnapshotStateList<FlipperDeviceScanResult>) {
     val scanService = (context.applicationContext as BleSpamApplication).scanService
-    scanService.getFlipperDevicesList().forEach { newFlipperDevice ->
+    val serviceItems = scanService.getFlipperDevicesList().toList()
+    val serviceAddresses = serviceItems.mapTo(hashSetOf()) { it.address }
+
+    serviceItems.forEach { newFlipperDevice ->
         val oldIndex = flipperDevices.indexOfFirst { it.address == newFlipperDevice.address }
         if (oldIndex != -1) {
             flipperDevices[oldIndex] = newFlipperDevice
@@ -95,11 +106,17 @@ private fun updateFlipperDevicesListView(context: Context, flipperDevices: Snaps
             flipperDevices.add(newFlipperDevice)
         }
     }
+    // The service expires devices after 5s; mirror that removal in the UI instead of keeping
+    // stale devices on screen until the next process start.
+    flipperDevices.removeAll { it.address !in serviceAddresses }
 }
 
 private fun updateSpamPackageListView(context: Context, spamPackages: SnapshotStateList<SpamPackageScanResult>) {
     val scanService = (context.applicationContext as BleSpamApplication).scanService
-    scanService.getSpamPackageScanResultList().forEach { newSpamPackage ->
+    val serviceItems = scanService.getSpamPackageScanResultList().toList()
+    val serviceAddresses = serviceItems.mapTo(hashSetOf()) { it.address }
+
+    serviceItems.forEach { newSpamPackage ->
         val oldIndex = spamPackages.indexOfFirst { it.address == newSpamPackage.address }
         if (oldIndex != -1) {
             spamPackages[oldIndex] = newSpamPackage
@@ -107,15 +124,35 @@ private fun updateSpamPackageListView(context: Context, spamPackages: SnapshotSt
             spamPackages.add(newSpamPackage)
         }
     }
+    spamPackages.removeAll { it.address !in serviceAddresses }
 }
 
 private fun onToggleButtonClicked(context: Context, viewModel: SpamDetectorViewModel) {
-    if (viewModel.isDetecting.value == true) {
+    val scanService = (context.applicationContext as BleSpamApplication).scanService
+    if (scanService.isScanning()) {
         BluetoothLeScanForegroundService.stopService(context)
-        Log.d(LOG_TAG, "Should Stop")
+        Log.d(LOG_TAG, "Stopped spam detection")
         viewModel.isDetecting.value = false
-    } else {
+        return
+    }
+
+    if (!PermissionCheck.checkPermission(Manifest.permission.BLUETOOTH_SCAN, context)) {
+        Toast.makeText(context, R.string.toast_missing_scan_permission, Toast.LENGTH_LONG).show()
+        return
+    }
+    val adapter = context.bluetoothAdapter()
+    if (adapter == null || !adapter.isEnabled) {
+        Toast.makeText(context, R.string.toast_bluetooth_disabled, Toast.LENGTH_LONG).show()
+        return
+    }
+
+    try {
         BluetoothLeScanForegroundService.startService(context)
         viewModel.isDetecting.value = true
+        Log.d(LOG_TAG, "Started spam detection")
+    } catch (t: Throwable) {
+        Log.e(LOG_TAG, "Could not start spam detection", t)
+        viewModel.isDetecting.value = false
+        Toast.makeText(context, R.string.toast_advertising_start_failed, Toast.LENGTH_LONG).show()
     }
 }

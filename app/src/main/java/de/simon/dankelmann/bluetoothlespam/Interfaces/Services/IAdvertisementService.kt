@@ -12,5 +12,6 @@ interface IAdvertisementService {
     fun getTxPowerLevel(): TxPowerLevel
     fun addAdvertisementServiceCallback(callback: IAdvertisementServiceCallback)
     fun removeAdvertisementServiceCallback(callback: IAdvertisementServiceCallback)
+    fun hasActiveAdvertisement(): Boolean
     fun isLegacyService():Boolean
 }

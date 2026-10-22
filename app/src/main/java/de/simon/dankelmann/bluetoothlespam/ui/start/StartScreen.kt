@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +60,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import de.simon.dankelmann.bluetoothlespam.BleSpamApplication
 import de.simon.dankelmann.bluetoothlespam.Database.AppDatabase
 import de.simon.dankelmann.bluetoothlespam.Database.Entities.AdvertisementSetCollectionEntity
@@ -72,10 +72,9 @@ import de.simon.dankelmann.bluetoothlespam.ui.theme.FloatingNavBarClearance
 import de.simon.dankelmann.bluetoothlespam.ui.theme.SpecterTopAppBarClearance
 import de.simon.dankelmann.bluetoothlespam.ui.theme.LocalExtendedColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 /** Route entry point (plan §6 step 4) — owns the business logic `StartFragment` used to own. */
 @Composable
@@ -89,6 +88,20 @@ fun StartRoute(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     var quickStartCollections by remember { mutableStateOf<List<AdvertisementSetCollectionEntity>>(emptyList()) }
+    var databaseCheckKey by remember { mutableIntStateOf(0) }
+
+    val loadQuickStart = {
+        scope.launch(Dispatchers.IO) {
+            val collections = try {
+                AppDatabase.getInstance().advertisementSetCollectionDao().getQuickStartCollections()
+            } catch (t: Throwable) {
+                emptyList()
+            }
+            withContext(Dispatchers.Main) {
+                quickStartCollections = collections
+            }
+        }
+    }
 
     val enableBluetoothLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -101,23 +114,30 @@ fun StartRoute(
     LaunchedEffect(Unit) {
         viewModel.appVersion.value = getAppVersion(context)
         viewModel.bluetoothSupport.value = getBluetoothSupportText(context)
-        // checkDatabase does synchronous Room queries — LaunchedEffect runs on the Compose/main
-        // dispatcher by default, so this must hop to IO explicitly (Room asserts against
-        // main-thread access). The original Fragment did this via CoroutineScope(Dispatchers.IO).
-        withContext(Dispatchers.IO) {
-            checkDatabase(viewModel)
-            // Loaded once here -- Quick Start is now a manually pinned list (Manage Quick Start
-            // screen), not recency-based, so nothing on this screen changes membership and it
-            // never needs to reload on ON_RESUME (e.g. every tab switch back to this screen).
-            quickStartCollections = AppDatabase.getInstance().advertisementSetCollectionDao().getQuickStartCollections()
+    }
+
+    // Room is not accessible from the main thread, so poll it on IO until the built-in data is
+    // ready. This replaces the old self-rescheduling executor that leaked a thread per retry.
+    LaunchedEffect(databaseCheckKey) {
+        viewModel.databaseIsReady.value = null
+        repeat(240) {
+            val ready = withContext(Dispatchers.IO) { checkDatabase(viewModel) }
+            if (ready) return@LaunchedEffect
+            delay(500L)
         }
+        viewModel.databaseIsReady.postValue(false)
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
+                // Never launch the permission or Bluetooth-enable dialogs automatically from
+                // ON_RESUME: denying them used to re-open the dialog on every resume/tab switch.
                 checkRequiredPermissions(context, viewModel)
-                checkBluetoothAdapter(viewModel, activity, enableBluetoothLauncher, promptIfAdapterIsDisabled = true)
+                checkBluetoothAdapter(viewModel, activity, enableBluetoothLauncher, promptIfAdapterIsDisabled = false)
+                // Quick Start membership changes on the Manage Quick Start screen, and custom
+                // groups can be added from the Advertise tab, so refresh on every resume.
+                loadQuickStart()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -129,7 +149,7 @@ fun StartRoute(
         onGrantPermissions = { requestRequiredPermissions(activity) },
         onRecheckPermissions = { checkRequiredPermissions(context, viewModel) },
         onRecheckBluetooth = { checkBluetoothAdapter(viewModel, activity, enableBluetoothLauncher, promptIfAdapterIsDisabled = true) },
-        onRecheckDatabase = { scope.launch(Dispatchers.IO) { checkDatabase(viewModel) } },
+        onRecheckDatabase = { databaseCheckKey++ },
         quickStartCollections = quickStartCollections,
         onQuickStartItemClicked = { collection ->
             scope.launch(Dispatchers.IO) {
@@ -181,7 +201,7 @@ private fun getBluetoothSupportText(context: Context): String {
 // and a background thread (checkDatabase, which must run off-main for its Room queries).
 // LiveData.setValue() asserts main-thread; postValue() is safe from anywhere.
 private fun addMissingRequirement(viewModel: StartViewModel, missingRequirement: String) {
-    val newList = viewModel.missingRequirements.value!!
+    val newList = viewModel.missingRequirements.value?.toMutableList() ?: mutableListOf()
     if (!newList.contains(missingRequirement)) {
         newList.add(missingRequirement)
     }
@@ -189,37 +209,45 @@ private fun addMissingRequirement(viewModel: StartViewModel, missingRequirement:
 }
 
 private fun removeMissingRequirement(viewModel: StartViewModel, missingRequirement: String) {
-    val newList = viewModel.missingRequirements.value!!
+    val newList = viewModel.missingRequirements.value?.toMutableList() ?: mutableListOf()
     newList.remove(missingRequirement)
     viewModel.missingRequirements.postValue(newList)
 }
 
-private fun checkDatabase(viewModel: StartViewModel) {
-    var result = false
+/** @return true once the built-in sets, lists and collections are all present. */
+private fun checkDatabase(viewModel: StartViewModel): Boolean {
     val database = AppDatabase.getInstance()
     removeMissingRequirement(viewModel, "Database is not initialized")
-    if (!database.isSeeding && !database.inTransaction()) {
-        removeMissingRequirement(viewModel, "Database is Seeding")
-        viewModel.isSeeding.postValue(false)
-        val numberOfAdvertisementSetEntities = database.advertisementSetDao().getAll().count()
-        if (numberOfAdvertisementSetEntities > 0) {
-            removeMissingRequirement(viewModel, "Database is empty")
-            result = true
-        } else {
-            addMissingRequirement(viewModel, "Database is empty")
-        }
-    } else {
+
+    if (database.isSeeding) {
         addMissingRequirement(viewModel, "Database is Seeding")
         viewModel.isSeeding.postValue(true)
+        viewModel.databaseIsReady.postValue(false)
+        return false
     }
-    viewModel.databaseIsReady.postValue(result)
 
-    if (!result) {
-        // Check again in a few seconds
-        Executors.newSingleThreadScheduledExecutor().schedule({
-            checkDatabase(viewModel)
-        }, 500, TimeUnit.MILLISECONDS)
+    viewModel.isSeeding.postValue(false)
+    removeMissingRequirement(viewModel, "Database is Seeding")
+    database.seedError?.let {
+        addMissingRequirement(viewModel, "Database seeding failed: ${it.message ?: it.javaClass.simpleName}")
     }
+
+    val hasSets = database.advertisementSetDao().getAll().isNotEmpty()
+    val hasLists = database.advertisementSetListDao().getAll().isNotEmpty()
+    val hasCollections = database.advertisementSetCollectionDao().getBuiltInCollections().isNotEmpty()
+
+    if (hasSets) removeMissingRequirement(viewModel, "Database is empty")
+    else addMissingRequirement(viewModel, "Database is empty")
+
+    if (hasLists && hasCollections) {
+        removeMissingRequirement(viewModel, "Built-in collections are not ready")
+    } else {
+        addMissingRequirement(viewModel, "Built-in collections are not ready")
+    }
+
+    val ready = hasSets && hasLists && hasCollections
+    viewModel.databaseIsReady.postValue(ready)
+    return ready
 }
 
 private fun checkBluetoothAdapter(
@@ -262,15 +290,6 @@ private fun checkRequiredPermissions(context: Context, viewModel: StartViewModel
         }
     }
     viewModel.allPermissionsGranted.value = allGranted
-
-    if (!allGranted) {
-        MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.missing_permissions_title)
-            .setMessage(R.string.missing_permissions_text)
-            .setPositiveButton(R.string.missing_permissions_grant) { _, _ -> requestRequiredPermissions(context as Activity) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
 }
 
 private fun requestRequiredPermissions(activity: Activity) {

@@ -1,0 +1,153 @@
+name: Android release
+
+# Builds a signed APK, publishes it as a GitHub Release (tag v<versionName> from
+# app/build.gradle.kts), and refreshes updates/version.json for the in-app updater.
+# Bump versionCode/versionName in app/build.gradle.kts to cut a new release. The
+# version.json commit does not retrigger this workflow (path filter is app/** only).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - '.github/workflows/android-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+
+      - name: Decode signing keystore
+        env:
+          STORE_FILE: ${{ secrets.STORE_FILE }}
+        run: |
+          if [ -z "$STORE_FILE" ]; then
+            echo "::error::STORE_FILE secret is not configured; refusing to publish an unsigned/debug-signed release."
+            exit 1
+          fi
+          echo "$STORE_FILE" | base64 -d > app/release.jks
+
+      - name: Run tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Build signed release APK
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Read and verify version
+        id: version
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
+          test -n "$VERSION_NAME"
+          test -n "$VERSION_CODE"
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Rename release artifact
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk BluetoothLESpam-release.apk
+          sha256sum BluetoothLESpam-release.apk > BluetoothLESpam-release.apk.sha256
+          ls -lh BluetoothLESpam-release.apk BluetoothLESpam-release.apk.sha256
+
+      - name: Verify release signature
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs BluetoothLESpam-release.apk
+          if "$APKSIGNER" verify --print-certs BluetoothLESpam-release.apk | grep -q "CN=Android Debug"; then
+            echo "::error::Release APK is debug-signed; check the keystore path and signing secrets."
+            exit 1
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.version.outputs.name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; replacing its APK and notes."
+            gh release upload "$TAG" \
+              BluetoothLESpam-release.apk \
+              BluetoothLESpam-release.apk.sha256 \
+              --clobber
+            if [ -f .github/release-notes.md ]; then
+              gh release edit "$TAG" --notes-file .github/release-notes.md
+            fi
+          else
+            if [ -f .github/release-notes.md ]; then
+              gh release create "$TAG" \
+                BluetoothLESpam-release.apk \
+                BluetoothLESpam-release.apk.sha256 \
+                --title "Bluetooth LE Spam ${{ steps.version.outputs.name }}" \
+                --notes-file .github/release-notes.md
+            else
+              gh release create "$TAG" \
+                BluetoothLESpam-release.apk \
+                BluetoothLESpam-release.apk.sha256 \
+                --title "Bluetooth LE Spam ${{ steps.version.outputs.name }}" \
+                --notes "$(git log -1 --pretty=%B)"
+            fi
+          fi
+
+      - name: Update in-app update manifest
+        run: |
+          VERSION_NAME="${{ steps.version.outputs.name }}"
+          VERSION_CODE="${{ steps.version.outputs.code }}"
+          CHANGELOG=$(git log -1 --pretty=%s)
+          jq -n \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg versionName "$VERSION_NAME" \
+            --arg changelog "$CHANGELOG" \
+            --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg apkUrl "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/BluetoothLESpam-release.apk" \
+            '{
+              versionCode: $versionCode,
+              versionName: $versionName,
+              apkUrl: $apkUrl,
+              changelog: $changelog,
+              force: false,
+              publishedAt: $publishedAt
+            }' > updates/version.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/version.json
+          if git diff --cached --quiet; then
+            echo "Update manifest unchanged."
+          else
+            git commit -m "chore: update version manifest for v$VERSION_NAME [skip ci]"
+            git pull --rebase --autostash -q origin main
+            git push origin HEAD:main
+          fi

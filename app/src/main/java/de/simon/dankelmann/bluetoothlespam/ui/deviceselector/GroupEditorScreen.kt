@@ -6,15 +6,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +52,8 @@ fun GroupEditorScreen(
     onGroupNameChanged: (String) -> Unit,
     collections: List<CollectionWithLists>,
     selectedListIds: Set<Int>,
+    isSaving: Boolean,
+    errorMessage: String?,
     onToggleCollection: (CollectionWithLists) -> Unit,
     onToggleList: (AdvertisementSetListEntity) -> Unit,
     onSave: () -> Unit,
@@ -64,6 +70,7 @@ fun GroupEditorScreen(
                 .fillMaxWidth()
                 .padding(16.dp),
             singleLine = true,
+            enabled = !isSaving,
         )
 
         val expandedCollections = remember { mutableStateMapOf<Int, Boolean>() }
@@ -82,20 +89,42 @@ fun GroupEditorScreen(
                         val id = collectionWithLists.collection.id
                         expandedCollections[id] = expandedCollections[id] != true
                     },
+                    enabled = !isSaving,
                     onToggleCollection = { onToggleCollection(collectionWithLists) },
                     onToggleList = onToggleList,
                 )
             }
         }
 
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            )
+        }
+
         Button(
             onClick = onSave,
-            enabled = groupName.isNotBlank() && selectedListIds.isNotEmpty(),
+            enabled = !isSaving && groupName.isNotBlank() && selectedListIds.isNotEmpty(),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
         ) {
-            Text("Save Group")
+            if (isSaving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Saving…")
+            } else {
+                Text("Save Group")
+            }
         }
     }
 }
@@ -105,6 +134,7 @@ private fun CollectionRow(
     collectionWithLists: CollectionWithLists,
     selectedListIds: Set<Int>,
     expanded: Boolean,
+    enabled: Boolean,
     onToggleExpanded: () -> Unit,
     onToggleCollection: () -> Unit,
     onToggleList: (AdvertisementSetListEntity) -> Unit,
@@ -127,14 +157,14 @@ private fun CollectionRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggleExpanded)
+                .clickable(enabled = enabled, onClick = onToggleExpanded)
                 .semantics {
                     contentDescription = checkedStateDescription
                     stateDescription = if (expanded) "Expanded" else "Collapsed"
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TriStateCheckbox(state = state, onClick = onToggleCollection)
+            TriStateCheckbox(state = state, onClick = onToggleCollection, enabled = enabled)
             Text(
                 text = collectionWithLists.collection.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -159,13 +189,14 @@ private fun CollectionRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 32.dp)
-                        .clickable { onToggleList(list) }
+                        .clickable(enabled = enabled) { onToggleList(list) }
                         .semantics { contentDescription = if (checked) "Selected" else "Not selected" },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TriStateCheckbox(
                         state = if (checked) ToggleableState.On else ToggleableState.Off,
                         onClick = { onToggleList(list) },
+                        enabled = enabled,
                     )
                     Text(
                         text = list.title,
