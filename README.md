@@ -67,6 +67,8 @@ Open **Settings → Updates**. The app fetches
 [`updates/version.json`](updates/version.json), compares its `versionCode` with the installed
 build, and offers the newer APK when one exists.
 
+<img src="docs/screenshots/updates.png" width="360" alt="Updates card showing the installed version is up to date">
+
 - Downloads go through Android's `DownloadManager`; progress and cancellation are shown in the
   card.
 - Before launching the installer, the app checks that the APK is readable, has the expected
