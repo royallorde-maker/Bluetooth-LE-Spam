@@ -2,7 +2,7 @@
   "versionCode": 4,
   "versionName": "1.1.0",
   "apkUrl": "https://github.com/royallorde-maker/Bluetooth-LE-Spam/releases/latest/download/BluetoothLESpam-release.apk",
-  "changelog": "ci: avoid obsolete Android SDK tools package",
+  "changelog": "Material 3 redesign, faster startup, reliability fixes, and in-app updates.",
   "force": false,
   "publishedAt": "2026-10-22T08:39:27Z"
 }
